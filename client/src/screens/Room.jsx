@@ -5,9 +5,13 @@ import { useSocket } from "../context/SocketProvider";
 
 const RoomPage = () => {
   const socket = useSocket();
+  const [room, setRoom] = useState("");
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [chatHistory, setChatHistory] = useState([]);
 
   const handleUserJoined = useCallback(({ email, id }) => {
     console.log(`Email ${email} joined room`);
@@ -53,6 +57,25 @@ const RoomPage = () => {
     },
     [sendStreams]
   );
+  useEffect(() => {
+    // Event listener to receive chat messages
+    socket.on("chat:message", ({ email, message }) => {
+      setChatHistory((prevChatHistory) => [
+        ...prevChatHistory,
+        { email, message },
+      ]);
+    });
+
+    // Event listener to receive chat history for the room
+    socket.on("chat:history", (history) => {
+      setChatHistory(history);
+    });
+
+    return () => {
+      socket.off("chat:message");
+      socket.off("chat:history");
+    };
+  }, [socket]);
 
   const handleNegoNeeded = useCallback(async () => {
     const offer = await peer.getOffer();
@@ -73,6 +96,15 @@ const RoomPage = () => {
     },
     [socket]
   );
+  const [chatMessages, setChatMessages] = useState([]);
+
+  // Event listener to receive chat messages
+  // const handleChatMessage = useCallback(({ email, message }) => {
+  //   setChatMessages((prevChatMessages) => [
+  //     ...prevChatMessages,
+  //     { email, message },
+  //   ]);
+  // }, []);
 
   const handleNegoNeedFinal = useCallback(async ({ ans }) => {
     await peer.setLocalDescription(ans);
@@ -91,6 +123,7 @@ const RoomPage = () => {
     socket.on("incomming:call", handleIncommingCall);
     socket.on("call:accepted", handleCallAccepted);
     socket.on("peer:nego:needed", handleNegoNeedIncomming);
+    socket.on("chat:message");
     socket.on("peer:nego:final", handleNegoNeedFinal);
 
     return () => {
@@ -99,6 +132,7 @@ const RoomPage = () => {
       socket.off("call:accepted", handleCallAccepted);
       socket.off("peer:nego:needed", handleNegoNeedIncomming);
       socket.off("peer:nego:final", handleNegoNeedFinal);
+      socket.off("chat:message");
     };
   }, [
     socket,
@@ -108,6 +142,11 @@ const RoomPage = () => {
     handleNegoNeedIncomming,
     handleNegoNeedFinal,
   ]);
+
+  const handleSendMessage = () => {
+    socket.emit("chat:message", { room, message });
+    setMessage("");
+  };
 
   return (
     <div>
@@ -139,6 +178,24 @@ const RoomPage = () => {
           />
         </>
       )}
+
+      <div>
+        <div style={{ height: "200px", overflow: "auto" }}>
+          {chatHistory.map(({ email, message }, index) => (
+            <div key={index}>
+              <strong>{email}: </strong>
+              {message}
+            </div>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Type your message"
+        />
+        <button onClick={handleSendMessage}>Send</button>
+      </div>
     </div>
   );
 };
